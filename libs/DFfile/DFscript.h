@@ -3,6 +3,8 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <cstdint>
+#include <cstring>
 
 class DFscript
 

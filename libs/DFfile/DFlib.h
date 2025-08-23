@@ -11,7 +11,7 @@
 #include "DFsnd.h"
 
 // first function to call to determine correct class
-static int32_t readDFfile(DFfile* &fileInst, const std::string& filePath) {
+extern int32_t readDFfile(DFfile* &fileInst, const std::string& filePath) {
 
 	std::ifstream file(filePath);
 	if (!file.good()) {

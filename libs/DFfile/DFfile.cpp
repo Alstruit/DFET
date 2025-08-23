@@ -255,7 +255,7 @@ void DFfile::writeBMPimage(DFfile::Container& container, const std::string& path
 	fileName.append(".bmp");
 
 	// write bmp image file
-	std::ofstream imageFile(fileName, std::ios::binary, std::ios::trunc);
+	std::ofstream imageFile(fileName, std::ios::binary | std::ios::trunc);
 	imageFile.write((char*)bmpHeader.getData(), bmpHeader.getHeaderSize());
 	for (int16_t i = 0; i < height; i++) {
 		imageFile.write((char*)containerDataBuffer.GetContent() + ((height - (i + 1)) * width), width);
@@ -270,7 +270,7 @@ void DFfile::writeBMPimage(DFfile::Container& container, const std::string& path
 		fileName.insert(fileName.length() - 4, " Z");
 		BMPheader bmpHeaderZ(height, width, 0, 26);
 
-		std::ofstream zimageFile(fileName, std::ios::binary, std::ios::trunc);
+		std::ofstream zimageFile(fileName, std::ios::binary | std::ios::trunc);
 		zimageFile.write((char*)bmpHeaderZ.getData(), bmpHeaderZ.getHeaderSize());
 		for (int16_t i = 0; i < height; i++) {
 			zimageFile.write(((char*)containerDataBuffer.GetContent() + ((height - (i + 1)) * width))+(width*height), width);
