@@ -213,7 +213,7 @@ void DFpup::writeAllDialougTexts(const std::string& path) {
 
 	std::string fileName(path);
 	fileName.append("\\AUDIO\\texts.csv");
-	std::ofstream output(fileName, std::ios::binary, std::ios::trunc);
+	std::ofstream output(fileName, std::ios::binary | std::ios::trunc);
 	// header:
 	output << "\"ID\", " << "\"container\", " << "\"Identifier\", " << "\"Text\"\n";
 
