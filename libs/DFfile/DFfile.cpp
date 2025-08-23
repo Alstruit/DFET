@@ -723,7 +723,7 @@ bool DFfile::getRawImageData(DFfile::Container& container, bool& zImage, int16_t
 	containerDataBuffer.resize(totalSize * 2);	// make it double as big so we can store secondary images
 	//uint8_t* frameOutput = new uint8_t[totalSize];
 	uint8_t* rawPixelOutput = containerDataBuffer.GetContent();
-
+	uint8_t* const buffer_end = rawPixelOutput + totalSize;
 	uint8_t* currOUT = rawPixelOutput;
 	for (int16_t heightc = 0; heightc < height; heightc++) {
 
@@ -779,6 +779,7 @@ bool DFfile::getRawImageData(DFfile::Container& container, bool& zImage, int16_t
 			if (!count) {
 				count += 32 + *currIN++;
 			}
+
 
 			switch (modeSel) {
 			case 2:
@@ -899,20 +900,30 @@ bool DFfile::getRawImageData(DFfile::Container& container, bool& zImage, int16_t
 	// if container end is not reached yet, Z images are expected
 	if ((currIN - container.data) < container.size) {
 		// Z IMAGE PROCESSING
-		
 		zImage = true;
-		const uint8_t* tableStart = currIN;
-		const uint16_t* depthInfoPos = (uint16_t*)tableStart;
+		const uint16_t* depthInfoPos = (const uint16_t*)currIN;
+		const uint8_t* data_block_start = currIN + (height * sizeof(uint16_t));
 
-
-		uint8_t* depthColorCurr = containerDataBuffer.GetContent() + (height * width);	// write image in second region
+		uint8_t* depthColorCurr = containerDataBuffer.GetContent() + totalSize;  // write image in second region
+		uint8_t* const z_buffer_end = depthColorCurr + totalSize;
 
 		for (int32_t i = 0; i < height; i++) {
-			for (uint8_t depth = 0; depth < *(tableStart + depthInfoPos[i]); depth++) {
-				const uint8_t valCount = *(tableStart + depthInfoPos[i] + 1 + (depth * 2));
-				memset(depthColorCurr, *(tableStart + depthInfoPos[i] + 2 + (depth * 2)), valCount);
+			uint16_t scanline_offset = depthInfoPos[i];
+			const uint8_t* scanline_ptr = data_block_start + scanline_offset;
+			uint8_t num_segments = *scanline_ptr++;
+
+			for (uint8_t depth = 0; depth < num_segments; depth++) {
+				const uint8_t valCount = *scanline_ptr++;
+				const uint8_t val = *scanline_ptr++;
+
+				if (depthColorCurr + valCount > z_buffer_end) {
+					zImage = false; // Prevent writing z-image if data is corrupt
+					return true;    // Main image is fine, just return
+				}
+				memset(depthColorCurr, val, valCount);
 				depthColorCurr += valCount;
 			}
 		}
 	}
+	return true;
 }
