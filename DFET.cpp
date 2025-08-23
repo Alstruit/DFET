@@ -403,9 +403,17 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        std::string final_output_path = output_dir_param.empty() ? std::filesystem::path(input_file_path).parent_path().string() : output_dir_param;
+        std::string final_output_path;
+
+        if (!output_dir_param.empty()) {
+            final_output_path = output_dir_param;
+        } else {
+            final_output_path = ".";
+        }
+
         std::string base_filename = std::filesystem::path(input_file_path).stem().string();
         std::string specific_output_folder = final_output_path + "/_" + base_filename;
+
         std::filesystem::create_directories(specific_output_folder);
         df_instance->outPutPath.assign(specific_output_folder);
 
