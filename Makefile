@@ -4,94 +4,95 @@
 # make            -> Builds/updates the optimized release version.
 # make release    -> Explicitly builds/updates the optimized release version.
 # make debug      -> Builds/updates the unoptimized version with debug symbols.
-# make clean      -> Removes all generated files.
+# make clean      -> Removes all generated build artifacts for all build types.
 
-# Compiler and Linker
+# --- Compiler and Core Settings ---
 CXX = g++
+TARGET_NAME = dfet
 
-# --- Build Configuration ---
+# Recursively find all C++ source files.
+SRCS := $(shell find . -name "*.cpp")
 
+# --- Common Configuration ---
+INCLUDE_PATHS = -I./ -Ilibs/DFfile -Ilibs/DFfile/DFset
+LINK_LIBS = -lstdc++fs
 # Base flags, common to both release and debug builds
 BASE_CXXFLAGS = -std=c++17 -Wno-narrowing -DDFET_CLI_MODE
 
-# Release-specific flags
+# --- Release Build Configuration ---
+RELEASE_DIR = build/release
+RELEASE_OBJ_DIR = $(RELEASE_DIR)/obj
+RELEASE_TARGET = $(RELEASE_DIR)/$(TARGET_NAME)
 RELEASE_CXXFLAGS = -O2
+# Define where the object files for the release build will be created
+RELEASE_OBJS := $(patsubst %.cpp,$(RELEASE_OBJ_DIR)/%.o,$(SRCS))
 
-# Debug-specific flags:
-# -g : Include full debugging symbols for GDB.
-# -O0: Disable all optimizations for accurate line-by-line stepping.
+# --- Debug Build Configuration ---
+DEBUG_DIR = build/debug
+DEBUG_OBJ_DIR = $(DEBUG_DIR)/obj
+DEBUG_TARGET = $(DEBUG_DIR)/$(TARGET_NAME)
 DEBUG_CXXFLAGS = -g -O0
-
-# Include paths for headers.
-INCLUDE_PATHS = -I./ -Ilibs/DFfile -Ilibs/DFfile/DFset
-
-# --- Directory and File Definitions ---
-
-BIN_DIR = build
-TARGET_NAME = dfet
-TARGET = $(BIN_DIR)/$(TARGET_NAME)
-
-# This file stores the last build type ('release' or 'debug').
-# It is placed in the bin/ directory and named .log to be ignored by default gitignore patterns.
-BUILD_STATE_FILE = $(BIN_DIR)/build.log
-
-SRCS := $(shell find . -name "*.cpp")
-OBJS := $(SRCS:.cpp=.o)
+# Define where the object files for the debug build will be created
+DEBUG_OBJS := $(patsubst %.cpp,$(DEBUG_OBJ_DIR)/%.o,$(SRCS))
 
 
 # --- Build Rules ---
 
+# Phony targets are not files.
 .PHONY: all release debug clean
 
 # The default target, executed when you just run 'make'.
 all: release
 
-# Release build target.
-release: | $(BIN_DIR) # Ensure bin directory exists before checking the state file
-	@# Check the state file. If the last build was not 'release', then force a clean.
-	@# The '2>/dev/null' silences errors if the state file doesn't exist yet.
-	@if [ "$$(cat $(BUILD_STATE_FILE) 2>/dev/null)" != "release" ]; then \
-		echo "Switching build mode to Release. Cleaning first..."; \
-		$(MAKE) clean; \
-	fi
-	@# Proceed with the actual build, passing the correct flags.
-	$(MAKE) $(TARGET) BUILD_MODE_FLAGS="$(RELEASE_CXXFLAGS)"
-	@# After a successful build, update the state file.
-	@echo "release" > $(BUILD_STATE_FILE)
+# Public-facing targets. These depend on the actual executable file.
+release: $(RELEASE_TARGET)
+debug: $(DEBUG_TARGET)
 
-# Debug build target.
-debug: | $(BIN_DIR) # Ensure bin directory exists before checking the state file
-	@# Check the state file. If the last build was not 'debug', then force a clean.
-	@if [ "$$(cat $(BUILD_STATE_FILE) 2>/dev/null)" != "debug" ]; then \
-		echo "Switching build mode to Debug. Cleaning first..."; \
-		$(MAKE) clean; \
-	fi
-	@# Proceed with the actual build, passing the correct flags.
-	$(MAKE) $(TARGET) BUILD_MODE_FLAGS="$(DEBUG_CXXFLAGS)"
-	@# After a successful build, update the state file.
-	@echo "debug" > $(BUILD_STATE_FILE)
+# --- Linking Rules ---
+
+# Rule to link the final release executable.
+$(RELEASE_TARGET): $(RELEASE_OBJS)
+	@echo "Linking Release Target..."
+	@mkdir -p $(@D)
+	$(CXX) $^ -o $@ $(LINK_LIBS)
+	@echo "Release build complete. Executable is '$@'."
+
+# Rule to link the final debug executable.
+$(DEBUG_TARGET): $(DEBUG_OBJS)
+	@echo "Linking Debug Target..."
+	@mkdir -p $(@D)
+	$(CXX) $^ -o $@ $(LINK_LIBS)
+	@echo "Debug build complete. Executable is '$@'."
 
 
-# This is the internal linking rule, called by the 'release' and 'debug' targets.
-$(TARGET): $(OBJS) | $(BIN_DIR)
-	@echo "Linking Target..."
-	$(CXX) $(OBJS) -o $@ -lstdc++fs
-	@echo "Build complete. Executable is '$(TARGET)'."
+# --- Compilation Rules ---
 
-# This is the internal compilation rule.
-# It uses the CXXFLAGS passed down from the 'release' or 'debug' target's recursive call.
-%.o: %.cpp
-	$(CXX) $(BASE_CXXFLAGS) $(BUILD_MODE_FLAGS) $(INCLUDE_PATHS) -c $< -o $@
+# Generic rule for compiling release object files.
+# It creates dependency files (.d) to track header changes.
+$(RELEASE_OBJ_DIR)/%.o: %.cpp
+	@echo "Compiling [Release] $<"
+	@mkdir -p $(@D)
+	$(CXX) $(BASE_CXXFLAGS) $(RELEASE_CXXFLAGS) $(INCLUDE_PATHS) -MMD -MP -c $< -o $@
 
-# Rule to create the bin directory.
-$(BIN_DIR):
-	@mkdir -p $(BIN_DIR)
+# Generic rule for compiling debug object files.
+$(DEBUG_OBJ_DIR)/%.o: %.cpp
+	@echo "Compiling [Debug] $<"
+	@mkdir -p $(@D)
+	$(CXX) $(BASE_CXXFLAGS) $(DEBUG_CXXFLAGS) $(INCLUDE_PATHS) -MMD -MP -c $< -o $@
 
-# Clean rule: Removes the executable, all object files, and the state file.
+
+# --- Cleanup Rule ---
+# This rule is safer than 'rm -rf build'. It only removes the directories
+# that are generated by this Makefile, leaving any other files or directories
+# in the 'build' folder untouched.
 clean:
-	@echo "Cleaning up..."
-	@rm -f $(TARGET)
-	@rm -f $(BUILD_STATE_FILE)
-	@find . -name "*.o" -delete
+	@echo "Cleaning up build artifacts..."
+	@rm -rf $(RELEASE_DIR) $(DEBUG_DIR)
 	@echo "Cleanup complete."
 
+
+# --- Dependency Inclusion ---
+# Include all the generated dependency files.
+# The '-' suppresses errors if the files don't exist yet.
+-include $(RELEASE_OBJS:.o=.d)
+-include $(DEBUG_OBJS:.o=.d)
