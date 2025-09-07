@@ -69,8 +69,7 @@ public:
 				std::string filname(outPutPath);
 				filname.push_back('/');
 				filname.append(audioName);
-				filname.append(".wav");
-
+				filname.append(DF::Extensions::WAV);
 				waveHeader header(totalFileSize, hertz, versionSig, (codec_flag == 1) ? 8 : 16);
 
 				containerDataBuffer.resize(totalFileSize + header.headerSize + 3);

@@ -132,23 +132,10 @@ void DFfile::writeContainersToFiles(const std::string& path) {
 			std::string baseName = currentFileName;
 			size_t dot_pos = baseName.rfind('.');
 
-			// Only trim the extension if it's a known type
+			// Use the new centralized utility to check if the extension is known.
 			if (dot_pos != std::string::npos) {
 				std::string ext = baseName.substr(dot_pos);
-
-				std::transform(ext.begin(), ext.end(), ext.begin(),
-					[](unsigned char c){ return std::tolower(c); });
-
-				const std::vector<std::string> knownExtensions = { ".dta", ".wav", ".txt", ".bmp", ".png", ".csv" };
-				bool isKnownExt = false;
-				for (const auto& knownExt : knownExtensions) {
-					if (ext == knownExt) {
-						isKnownExt = true;
-						break;
-					}
-				}
-
-				if (isKnownExt) {
+				if (DF::Extensions::isKnown(ext)) {
 					baseName = baseName.substr(0, dot_pos);
 				}
 			}
@@ -160,14 +147,13 @@ void DFfile::writeContainersToFiles(const std::string& path) {
 		FileName.push_back('_');
 		FileName.append("container ");
 		FileName.append(std::to_string(container));
-		FileName.append(".dta");
+		FileName.append(DF::Extensions::DTA);
 
 		std::ofstream fileEXT(FileName, std::ios::binary);
 		fileEXT.write((char*)containers[container].data, containers[container].size);
 		fileEXT.close();
 	}
 }
-
 // RECEIVE INFOS
 std::string DFfile::getContainerInfo() {
 	this->updateContainerInfo();
@@ -278,7 +264,7 @@ void DFfile::writeBMPimage(DFfile::Container& container, const std::string& path
 		fileName.append(customFileName);
 	}
 
-	fileName.append(".bmp");
+	fileName.append(DF::Extensions::BMP);
 
 	// write bmp image file
 	std::ofstream imageFile(fileName, std::ios::binary | std::ios::trunc);
@@ -417,7 +403,7 @@ void DFfile::writeTransPNGimage(const std::string& writeTo, int32_t containerID)
 	//fileName.append(currentFileName);
 	fileName.append("/frame_");
 	fileName.append(std::to_string(containerID));
-	fileName.append(".png");
+	fileName.append(DF::Extensions::PNG);
 
 	lodepng::encode(fileName, image, imageWidth, imageHeight);
 }
@@ -516,7 +502,7 @@ bool DFfile::writeWavFromContainer(const std::string& path, const std::string& n
 	else
 		filname.append(temp.substr(pos + 1));
 
-	filname.append(".wav");
+	filname.append(DF::Extensions::WAV);
 
 	std::ofstream file(filname, std::ios::binary | std::ios::trunc);
 	file.write((char*)containerDataBuffer.GetContent(), fileSize + 44);
@@ -557,7 +543,7 @@ bool DFfile::writeAllAudioC(const std::string& path) {
 			std::string filname(path);
 			filname.push_back('/');
 			filname.append(audioPtr->trackName);
-			filname.append(".wav");
+			filname.append(DF::Extensions::WAV);
 
 			waveHeader header(totalFileSize, hertz, versionSig, (codec_flag == 1) ? 8 : 16);
 

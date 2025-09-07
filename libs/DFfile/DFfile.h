@@ -5,6 +5,32 @@
 #include <filesystem>
 #include "DFscript.h"
 #include "lodepng.h"
+#include <algorithm>
+
+
+namespace DF {
+	struct Extensions {
+		// Define all extensions that the program can generate.
+		static constexpr const char* WAV = ".wav";
+		static constexpr const char* TXT = ".txt";
+		static constexpr const char* BMP = ".bmp";
+		static constexpr const char* PNG = ".png";
+		static constexpr const char* CSV = ".csv";
+		static constexpr const char* DTA = ".dta";
+
+		// A portable, case-insensitive check to see if a given extension is one of the known types.
+		static bool isKnown(const std::string& ext) {
+			if (ext.empty()) return false;
+
+			std::string lower_ext = ext;
+			std::transform(lower_ext.begin(), lower_ext.end(), lower_ext.begin(),
+				[](unsigned char c){ return std::tolower(c); });
+
+			return (lower_ext == WAV || lower_ext == TXT || lower_ext == BMP ||
+					lower_ext == PNG || lower_ext == CSV || lower_ext == DTA);
+		}
+	};
+}
 
 class DFfile
 {
@@ -83,7 +109,7 @@ public:
 
 	// script writing
 	bool writeScript(DFfile::Container& container, std::string fileName) {
-		fileName.append(".txt");
+		fileName.append(DF::Extensions::TXT);
 		std::string out = scripter.binaryScriptToText(container.data);
 		if (out.length() > 1) {
 			std::ofstream scr(fileName, std::ios::trunc);
@@ -235,13 +261,13 @@ protected:
 				memcpy(trackName, (inst->containers[0].data + 37), nameLength);
 				trackName[nameLength] = '\0';
 
-				size_t len = strlen(trackName);
-				if (len >= 4) {
-					const char* ext = trackName + len - 4;
-					if (tolower(ext[0]) == '.' && tolower(ext[1]) == 'w' &&
-						tolower(ext[2]) == 'a' && tolower(ext[3]) == 'v') {
-						trackName[len - 4] = '\0'; // Trim the extension.
-						}
+				// Intelligently trim the extension using the centralized utility.
+				char* dot = strrchr(trackName, '.');
+				if (dot != NULL) {
+					// Convert the C-string extension part to a std::string to use the utility.
+					if (DF::Extensions::isKnown(std::string(dot))) {
+						*dot = '\0'; // Trim the extension.
+					}
 				}
 			}
 
