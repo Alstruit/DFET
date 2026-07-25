@@ -272,7 +272,8 @@ protected:
 			}
 
 
-			int8_t* container = (int8_t*)inst->containers[1].data;
+			int32_t loopBlockIdx = *(int32_t*)(inst->containers[0].data + 0x64);
+			int8_t* container = (int8_t*)inst->containers[loopBlockIdx].data;
 
 			// start with first block
 			// copy upper part with loop order

@@ -518,26 +518,56 @@ bool DFfile::writeAllAudioC(const std::string& path) {
 
 		if (audioPtr->audioLoopChunkCount) {
 
+			// Resolve the playback order of the looping/background track. When
+			// there are more record chunks than the playlist can address, the
+			// track is disk-streamed: the whole record array plays in order and
+			// the (capped) playlist is ignored. Otherwise the playlist order
+			// (chunkOrder, 1-based) drives playback. (V4.1 only (probably))
+			bool diskStream = audioPtr->audioLoopChunkCount > audioPtr->totalLoopsChunks;
+
+			int32_t playChunksCapacity = diskStream
+				? audioPtr->audioLoopChunkCount
+				: audioPtr->totalLoopsChunks;
+
+			int32_t* playChunks = new int32_t[playChunksCapacity];
+			int32_t playChunksCount = 0;
+
+			if (diskStream) {
+				for (int32_t i = 0; i < audioPtr->audioLoopChunkCount; i++)
+					playChunks[playChunksCount++] = audioPtr->audioLoopChunks[i].chunkBlockID;
+			}
+			else {
+				for (int32_t i = 0; i < audioPtr->totalLoopsChunks; i++) {
+					int32_t rec = audioPtr->chunkOrder[i] - 1;
+					if (rec >= 0 && rec < audioPtr->audioLoopChunkCount)
+						playChunks[playChunksCount++] = audioPtr->audioLoopChunks[rec].chunkBlockID;
+				}
+			}
+			if (!playChunksCount) {
+				delete[] playChunks;
+				return true;
+			}
+
 			// first we need the total file size of all Audioloops together
 			int32_t totalFileSize{ 0 };
-			int32_t* fileSizes = new int32_t[audioPtr->totalLoopsChunks];
-			for (int32_t loop = 0; loop < audioPtr->totalLoopsChunks; loop++) {
+			int32_t* fileSizes = new int32_t[playChunksCount];
+			for (int32_t loop = 0; loop < playChunksCount; loop++) {
 
-				fileSizes[loop] = *(int32_t*)(containers[audioPtr->audioLoopChunks[audioPtr->chunkOrder[loop] - 1].chunkBlockID].data + 36);
+				fileSizes[loop] = *(int32_t*)(containers[playChunks[loop]].data + 36);
 				totalFileSize += fileSizes[loop];
 			}
 
 			// get hertz rate from first block. 
-			int32_t hertz = *(int32_t*)(containers[audioPtr->audioLoopChunks[0].chunkBlockID].data + 28);
+			int32_t hertz = *(int32_t*)(containers[playChunks[0]].data + 28);
 			// Hertz fix: priotize bigger
-			if (audioPtr->audioLoopChunkCount > 1) {
-				int32_t hertzTmp = *(int32_t*)(containers[audioPtr->audioLoopChunks[1].chunkBlockID].data + 28);
+			if (playChunksCount > 1) {
+				int32_t hertzTmp = *(int32_t*)(containers[playChunks[1]].data + 28);
 				if (hertz < hertzTmp)
 					hertz = hertzTmp;
 			}
 
 			// get codec flag from first chunk to determine format for the whole track
-			int16_t codec_flag = *(int16_t*)(containers[audioPtr->audioLoopChunks[0].chunkBlockID].data + 0x1A);
+			int16_t codec_flag = *(int16_t*)(containers[playChunks[0]].data + 0x1A);
 
 			// construct audio name based on blockZero
 			std::string filname(path);
@@ -554,16 +584,18 @@ bool DFfile::writeAllAudioC(const std::string& path) {
 			std::ofstream audioFile(filname, std::ios::binary | std::ios::trunc);
 
 			int32_t current{ 0 };
-			for (int32_t loop = 0; loop < audioPtr->totalLoopsChunks; loop++) {
-				bool success;
+			for (int32_t loop = 0; loop < playChunksCount; loop++) {
+				bool success = true;
 				if (codec_flag == 1) {
-					success = audioDecoder_v40(fileSizes[loop], (int8_t*)containers[audioPtr->audioLoopChunks[audioPtr->chunkOrder[loop] - 1].chunkBlockID].data, (int8_t*)containerDataBuffer.GetContent() + header.headerSize + current);
+					success = audioDecoder_v40(fileSizes[loop], (int8_t*)containers[playChunks[loop]].data, (int8_t*)containerDataBuffer.GetContent() + header.headerSize + current);
 				}
 				else if (codec_flag == 2) {
-					success = audioDecoder_v41(fileSizes[loop], (int8_t*)containers[audioPtr->audioLoopChunks[audioPtr->chunkOrder[loop] - 1].chunkBlockID].data, (int8_t*)containerDataBuffer.GetContent() + header.headerSize + current);
+					success = audioDecoder_v41(fileSizes[loop], (int8_t*)containers[playChunks[loop]].data, (int8_t*)containerDataBuffer.GetContent() + header.headerSize + current);
 				}
 
 				if (!success) {
+					delete[] fileSizes;
+					delete[] playChunks;
 					status = ERRDECODEAUDIO;
 					return false;
 				}
@@ -571,8 +603,11 @@ bool DFfile::writeAllAudioC(const std::string& path) {
 			}
 			audioFile.write((char*)containerDataBuffer.GetContent(), totalFileSize + header.headerSize);
 			audioFile.close();
-			fileCounter++;
+
 			delete[] fileSizes;
+			delete[] playChunks;
+
+			fileCounter++;
 		}
 
 			for (int32_t shot = 0; shot < audioPtr->audioSingleChunkCount; shot++) {
