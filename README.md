@@ -4,6 +4,12 @@ It can extract all file formats that are used by the game "Titanic: Adventure ou
 
 You can download the Tool [HERE](https://github.com/M3tox/DFET/releases/tag/0.89).
 
+# Building Linux CLI
+
+DFET can be built on Linux with GNU Make and a C++17 compiler:
+
+The non debug CLI 'make' is written to `build/bin/dfet`. Use `make debug` for debug version and found at `build/debug/bin/dfet`
+
 # Usage
 The tool is very straight forward and does not require any programming experience. Once you have started it up it should look like this:
 ![grafik](https://user-images.githubusercontent.com/75583358/128694060-2675db4e-9553-4ce1-8f4b-4a0ea6324464.png)
@@ -22,7 +28,8 @@ After the extraction you should see an extraction report, like this:
 It will write the extracted files into a folder, that is named after the file you have selected, but with a _ before. E.g.: "CONTROL.SET" -> "_CONTROL".
 
 # Supported formats and platforms
-This tool was tested for Windows 10, but in theory, it should also work down to Windows 7. I was informed that it also works on the new Windows 11. There is currently no MAC or Linux version available.
+This tool was tested for Windows 10, but in theory, it should also work down to Windows 7. I was informed that it also works on the new Windows 11. There is currently no MAC version available.
+A Linux CLI build is available; see the build instructions above.
 It's a 32bit application, which also works on 64bit operating systems.
 
 Files you can currently extract:

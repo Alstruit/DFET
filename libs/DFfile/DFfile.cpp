@@ -132,23 +132,10 @@ void DFfile::writeContainersToFiles(const std::string& path) {
 			std::string baseName = currentFileName;
 			size_t dot_pos = baseName.rfind('.');
 
-			// Only trim the extension if it's a known type
+			// Use the new centralized utility to check if the extension is known.
 			if (dot_pos != std::string::npos) {
 				std::string ext = baseName.substr(dot_pos);
-
-				std::transform(ext.begin(), ext.end(), ext.begin(),
-					[](unsigned char c){ return std::tolower(c); });
-
-				const std::vector<std::string> knownExtensions = { ".dta", ".wav", ".txt", ".bmp", ".png", ".csv" };
-				bool isKnownExt = false;
-				for (const auto& knownExt : knownExtensions) {
-					if (ext == knownExt) {
-						isKnownExt = true;
-						break;
-					}
-				}
-
-				if (isKnownExt) {
+				if (DF::Extensions::isKnown(ext)) {
 					baseName = baseName.substr(0, dot_pos);
 				}
 			}
@@ -160,14 +147,13 @@ void DFfile::writeContainersToFiles(const std::string& path) {
 		FileName.push_back('_');
 		FileName.append("container ");
 		FileName.append(std::to_string(container));
-		FileName.append(".dta");
+		FileName.append(DF::Extensions::DTA);
 
 		std::ofstream fileEXT(FileName, std::ios::binary);
 		fileEXT.write((char*)containers[container].data, containers[container].size);
 		fileEXT.close();
 	}
 }
-
 // RECEIVE INFOS
 std::string DFfile::getContainerInfo() {
 	this->updateContainerInfo();
@@ -278,10 +264,10 @@ void DFfile::writeBMPimage(DFfile::Container& container, const std::string& path
 		fileName.append(customFileName);
 	}
 
-	fileName.append(".bmp");
+	fileName.append(DF::Extensions::BMP);
 
 	// write bmp image file
-	std::ofstream imageFile(fileName, std::ios::binary, std::ios::trunc);
+	std::ofstream imageFile(fileName, std::ios::binary | std::ios::trunc);
 	imageFile.write((char*)bmpHeader.getData(), bmpHeader.getHeaderSize());
 	for (int16_t i = 0; i < height; i++) {
 		imageFile.write((char*)containerDataBuffer.GetContent() + ((height - (i + 1)) * width), width);
@@ -296,7 +282,7 @@ void DFfile::writeBMPimage(DFfile::Container& container, const std::string& path
 		fileName.insert(fileName.length() - 4, " Z");
 		BMPheader bmpHeaderZ(height, width, 0, 26);
 
-		std::ofstream zimageFile(fileName, std::ios::binary, std::ios::trunc);
+		std::ofstream zimageFile(fileName, std::ios::binary | std::ios::trunc);
 		zimageFile.write((char*)bmpHeaderZ.getData(), bmpHeaderZ.getHeaderSize());
 		for (int16_t i = 0; i < height; i++) {
 			zimageFile.write(((char*)containerDataBuffer.GetContent() + ((height - (i + 1)) * width))+(width*height), width);
@@ -417,7 +403,7 @@ void DFfile::writeTransPNGimage(const std::string& writeTo, int32_t containerID)
 	//fileName.append(currentFileName);
 	fileName.append("/frame_");
 	fileName.append(std::to_string(containerID));
-	fileName.append(".png");
+	fileName.append(DF::Extensions::PNG);
 
 	lodepng::encode(fileName, image, imageWidth, imageHeight);
 }
@@ -516,7 +502,7 @@ bool DFfile::writeWavFromContainer(const std::string& path, const std::string& n
 	else
 		filname.append(temp.substr(pos + 1));
 
-	filname.append(".wav");
+	filname.append(DF::Extensions::WAV);
 
 	std::ofstream file(filname, std::ios::binary | std::ios::trunc);
 	file.write((char*)containerDataBuffer.GetContent(), fileSize + 44);
@@ -557,7 +543,7 @@ bool DFfile::writeAllAudioC(const std::string& path) {
 			std::string filname(path);
 			filname.push_back('/');
 			filname.append(audioPtr->trackName);
-			filname.append(".wav");
+			filname.append(DF::Extensions::WAV);
 
 			waveHeader header(totalFileSize, hertz, versionSig, (codec_flag == 1) ? 8 : 16);
 
@@ -749,7 +735,7 @@ bool DFfile::getRawImageData(DFfile::Container& container, bool& zImage, int16_t
 	containerDataBuffer.resize(totalSize * 2);	// make it double as big so we can store secondary images
 	//uint8_t* frameOutput = new uint8_t[totalSize];
 	uint8_t* rawPixelOutput = containerDataBuffer.GetContent();
-
+	uint8_t* const buffer_end = rawPixelOutput + totalSize;
 	uint8_t* currOUT = rawPixelOutput;
 	for (int16_t heightc = 0; heightc < height; heightc++) {
 
@@ -805,6 +791,7 @@ bool DFfile::getRawImageData(DFfile::Container& container, bool& zImage, int16_t
 			if (!count) {
 				count += 32 + *currIN++;
 			}
+
 
 			switch (modeSel) {
 			case 2:
@@ -925,20 +912,30 @@ bool DFfile::getRawImageData(DFfile::Container& container, bool& zImage, int16_t
 	// if container end is not reached yet, Z images are expected
 	if ((currIN - container.data) < container.size) {
 		// Z IMAGE PROCESSING
-		
 		zImage = true;
-		const uint8_t* tableStart = currIN;
-		const uint16_t* depthInfoPos = (uint16_t*)tableStart;
+		const uint16_t* depthInfoPos = (const uint16_t*)currIN;
+		const uint8_t* data_block_start = currIN + (height * sizeof(uint16_t));
 
-
-		uint8_t* depthColorCurr = containerDataBuffer.GetContent() + (height * width);	// write image in second region
+		uint8_t* depthColorCurr = containerDataBuffer.GetContent() + totalSize;  // write image in second region
+		uint8_t* const z_buffer_end = depthColorCurr + totalSize;
 
 		for (int32_t i = 0; i < height; i++) {
-			for (uint8_t depth = 0; depth < *(tableStart + depthInfoPos[i]); depth++) {
-				const uint8_t valCount = *(tableStart + depthInfoPos[i] + 1 + (depth * 2));
-				memset(depthColorCurr, *(tableStart + depthInfoPos[i] + 2 + (depth * 2)), valCount);
+			uint16_t scanline_offset = depthInfoPos[i];
+			const uint8_t* scanline_ptr = data_block_start + scanline_offset;
+			uint8_t num_segments = *scanline_ptr++;
+
+			for (uint8_t depth = 0; depth < num_segments; depth++) {
+				const uint8_t valCount = *scanline_ptr++;
+				const uint8_t val = *scanline_ptr++;
+
+				if (depthColorCurr + valCount > z_buffer_end) {
+					zImage = false; // Prevent writing z-image if data is corrupt
+					return true;    // Main image is fine, just return
+				}
+				memset(depthColorCurr, val, valCount);
 				depthColorCurr += valCount;
 			}
 		}
 	}
+	return true;
 }
